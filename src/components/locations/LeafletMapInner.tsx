@@ -73,8 +73,8 @@ export default function LeafletMapInner({ latitude, longitude, radius, onLocatio
             center={[latitude, longitude]}
             radius={radius}
             pathOptions={{
-              color: 'hsl(142, 76%, 36%)',
-              fillColor: 'hsl(142, 76%, 36%)',
+              color: 'hsl(var(--primary))',
+              fillColor: 'hsl(var(--primary))',
               fillOpacity: 0.2,
             }}
           />
