@@ -1,22 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
-import { Icon, LatLng } from 'leaflet';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, Loader2, MapPin, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
-import 'leaflet/dist/leaflet.css';
-
-// Fix for default marker icon
-const defaultIcon = new Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
 
 interface LocationMapProps {
   latitude: number | null;
@@ -25,40 +11,20 @@ interface LocationMapProps {
   onLocationChange: (lat: number, lng: number, address?: string) => void;
 }
 
-// Component to handle map clicks
-function MapClickHandler({ onLocationChange }: { onLocationChange: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click: (e) => {
-      onLocationChange(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// Component to update map center
-function MapUpdater({ center }: { center: [number, number] | null }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (center) {
-      map.setView(center, 16);
-    }
-  }, [center, map]);
-  
-  return null;
-}
+// Lazy load the map component to avoid SSR/rendering issues
+const LeafletMapInner = lazy(() => import('./LeafletMapInner'));
 
 export function LocationMap({ latitude, longitude, radius, onLocationChange }: LocationMapProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
-  // Default center (Spain)
-  const defaultCenter: [number, number] = [40.416775, -3.703790];
-  const center: [number, number] = latitude && longitude 
-    ? [latitude, longitude] 
-    : defaultCenter;
+  // Wait for component to mount before showing map
+  useEffect(() => {
+    setMapReady(true);
+  }, []);
 
   // Search for address using Nominatim (OpenStreetMap)
   const searchAddress = useCallback(async () => {
@@ -202,52 +168,43 @@ export function LocationMap({ latitude, longitude, radius, onLocationChange }: L
 
       {/* Search results dropdown */}
       {searchResults.length > 0 && (
-        <div className="absolute z-[1000] w-full bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-          {searchResults.map((result, index) => (
-            <button
-              key={index}
-              type="button"
-              className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-start gap-2"
-              onClick={() => handleResultSelect(result)}
-            >
-              <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
-              <span className="line-clamp-2">{result.display_name}</span>
-            </button>
-          ))}
+        <div className="relative z-[1000]">
+          <div className="absolute w-full bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {searchResults.map((result, index) => (
+              <button
+                key={index}
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-start gap-2"
+                onClick={() => handleResultSelect(result)}
+              >
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                <span className="line-clamp-2">{result.display_name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Map */}
-      <div className="h-64 rounded-lg overflow-hidden border relative">
-        <MapContainer
-          center={center}
-          zoom={latitude && longitude ? 16 : 6}
-          className="h-full w-full"
-          scrollWheelZoom={true}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          
-          <MapClickHandler onLocationChange={handleMapClick} />
-          <MapUpdater center={latitude && longitude ? [latitude, longitude] : null} />
-          
-          {latitude && longitude && (
-            <>
-              <Marker position={[latitude, longitude]} icon={defaultIcon} />
-              <Circle
-                center={[latitude, longitude]}
-                radius={radius}
-                pathOptions={{
-                  color: 'hsl(var(--primary))',
-                  fillColor: 'hsl(var(--primary))',
-                  fillOpacity: 0.2,
-                }}
-              />
-            </>
-          )}
-        </MapContainer>
+      <div className="h-64 rounded-lg overflow-hidden border relative bg-muted">
+        {mapReady ? (
+          <Suspense fallback={
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          }>
+            <LeafletMapInner
+              latitude={latitude}
+              longitude={longitude}
+              radius={radius}
+              onLocationChange={handleMapClick}
+            />
+          </Suspense>
+        ) : (
+          <div className="h-full flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
