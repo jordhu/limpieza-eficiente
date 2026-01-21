@@ -21,7 +21,10 @@ export type Database = {
           id: string
           location_id: string | null
           photo_url: string | null
+          resolution_notes: string | null
           resolved: boolean
+          resolved_at: string | null
+          resolved_by: string | null
           user_id: string
         }
         Insert: {
@@ -30,7 +33,10 @@ export type Database = {
           id?: string
           location_id?: string | null
           photo_url?: string | null
+          resolution_notes?: string | null
           resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
           user_id: string
         }
         Update: {
@@ -39,7 +45,10 @@ export type Database = {
           id?: string
           location_id?: string | null
           photo_url?: string | null
+          resolution_notes?: string | null
           resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
           user_id?: string
         }
         Relationships: [
