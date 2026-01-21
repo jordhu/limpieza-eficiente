@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Clock, QrCode, MapPin, Calendar, History, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ClockInButton } from '@/components/worker/ClockInButton';
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 
 export default function WorkerHome() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
@@ -133,7 +135,7 @@ export default function WorkerHome() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{user?.email?.split('@')[0]}</span>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/worker/history')}>
               <History className="w-5 h-5" />
             </Button>
           </div>

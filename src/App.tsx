@@ -12,6 +12,7 @@ import Login from "./pages/auth/Login";
 import Dashboard from "./pages/admin/Dashboard";
 import Locations from "./pages/admin/Locations";
 import WorkerHome from "./pages/worker/WorkerHome";
+import TimeHistory from "./pages/worker/TimeHistory";
 
 // Protected Route Components
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -53,6 +54,14 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="worker">
                   <WorkerHome />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/worker/history" 
+              element={
+                <ProtectedRoute requiredRole="worker">
+                  <TimeHistory />
                 </ProtectedRoute>
               } 
             />
