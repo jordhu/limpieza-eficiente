@@ -14,16 +14,243 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      incidents: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          location_id: string | null
+          photo_url: string | null
+          resolved: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          location_id?: string | null
+          photo_url?: string | null
+          resolved?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          location_id?: string | null
+          photo_url?: string | null
+          resolved?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incidents_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "work_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invitations: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          email: string
+          expires_at: string
+          id: string
+          used: boolean
+          used_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          email: string
+          expires_at: string
+          id?: string
+          used?: boolean
+          used_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          used?: boolean
+          used_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      time_entries: {
+        Row: {
+          created_at: string
+          end_lat: number | null
+          end_lng: number | null
+          end_method: Database["public"]["Enums"]["clock_method"] | null
+          end_time: string | null
+          id: string
+          location_id: string | null
+          notes: string | null
+          start_lat: number | null
+          start_lng: number | null
+          start_method: Database["public"]["Enums"]["clock_method"]
+          start_time: string
+          synced: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_lat?: number | null
+          end_lng?: number | null
+          end_method?: Database["public"]["Enums"]["clock_method"] | null
+          end_time?: string | null
+          id?: string
+          location_id?: string | null
+          notes?: string | null
+          start_lat?: number | null
+          start_lng?: number | null
+          start_method: Database["public"]["Enums"]["clock_method"]
+          start_time?: string
+          synced?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_lat?: number | null
+          end_lng?: number | null
+          end_method?: Database["public"]["Enums"]["clock_method"] | null
+          end_time?: string | null
+          id?: string
+          location_id?: string | null
+          notes?: string | null
+          start_lat?: number | null
+          start_lng?: number | null
+          start_method?: Database["public"]["Enums"]["clock_method"]
+          start_time?: string
+          synced?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_entries_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "work_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      work_locations: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+          qr_code: string
+          radius_meters: number
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+          qr_code: string
+          radius_meters?: number
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+          qr_code?: string
+          radius_meters?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "worker"
+      clock_method: "qr" | "gps" | "manual"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +377,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "worker"],
+      clock_method: ["qr", "gps", "manual"],
+    },
   },
 } as const
