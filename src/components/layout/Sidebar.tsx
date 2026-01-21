@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -7,27 +7,35 @@ import {
   AlertTriangle,
   Settings,
   LogOut,
-  QrCode,
+  Mail,
   Menu,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin' },
   { icon: Users, label: 'Trabajadores', path: '/admin/workers' },
   { icon: MapPin, label: 'Ubicaciones', path: '/admin/locations' },
+  { icon: Mail, label: 'Invitaciones', path: '/admin/invitations' },
   { icon: Clock, label: 'Registros', path: '/admin/time-entries' },
   { icon: AlertTriangle, label: 'Incidencias', path: '/admin/incidents' },
-  { icon: QrCode, label: 'Códigos QR', path: '/admin/qr-codes' },
   { icon: Settings, label: 'Configuración', path: '/admin/settings' },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   return (
     <>
@@ -94,6 +102,7 @@ export function Sidebar() {
         {/* Footer */}
         <div className="p-3 border-t border-sidebar-border">
           <button
+            onClick={handleSignOut}
             className={cn(
               'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg',
               'text-sidebar-foreground/70 hover:text-destructive hover:bg-sidebar-accent transition-colors'
