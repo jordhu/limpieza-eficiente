@@ -1,48 +1,106 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Clock, Mail, Lock, ArrowRight, Loader2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { user, role, loading: authLoading, signIn, signUp, verifyInvitation } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isInvitation, setIsInvitation] = useState(false);
+  const [mode, setMode] = useState<'login' | 'invitation' | 'register'>('login');
   const [invitationCode, setInvitationCode] = useState('');
+  const [invitationEmail, setInvitationEmail] = useState('');
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user && role) {
+      if (role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/worker');
+      }
+    }
+  }, [user, role, authLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate login
-    setTimeout(() => {
-      setLoading(false);
-      
-      // Demo: admin@demo.com goes to admin, others go to worker
-      if (email === 'admin@demo.com') {
-        toast.success('Bienvenido, Administrador');
-        navigate('/admin');
+    const { error } = await signIn(email, password);
+    
+    setLoading(false);
+    
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        toast.error('Credenciales incorrectas');
       } else {
-        toast.success('Bienvenido');
-        navigate('/worker');
+        toast.error('Error al iniciar sesión');
       }
-    }, 1500);
+      return;
+    }
+    
+    toast.success('Bienvenido');
   };
 
-  const handleInvitation = async (e: React.FormEvent) => {
+  const handleVerifyInvitation = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    const { valid, email: invEmail } = await verifyInvitation(invitationCode.toUpperCase());
+    
+    setLoading(false);
+    
+    if (valid && invEmail) {
+      setInvitationEmail(invEmail);
+      setEmail(invEmail);
+      setMode('register');
       toast.success('Código válido. Completa tu registro.');
-      // Would redirect to registration form
-    }, 1500);
+    } else {
+      toast.error('Código inválido o expirado');
+    }
   };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (password.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    
+    setLoading(true);
+
+    const { error } = await signUp(email, password, name);
+    
+    setLoading(false);
+    
+    if (error) {
+      if (error.message.includes('already registered')) {
+        toast.error('Este correo ya está registrado');
+      } else {
+        toast.error('Error al registrar: ' + error.message);
+      }
+      return;
+    }
+    
+    toast.success('Cuenta creada correctamente');
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -93,31 +151,32 @@ export default function Login() {
             <span className="text-2xl font-bold">CleanTrack</span>
           </div>
 
-          {/* Toggle */}
-          <div className="flex bg-muted rounded-lg p-1">
-            <button
-              onClick={() => setIsInvitation(false)}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-                !isInvitation
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Iniciar Sesión
-            </button>
-            <button
-              onClick={() => setIsInvitation(true)}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-                isInvitation
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Tengo Invitación
-            </button>
-          </div>
+          {mode !== 'register' && (
+            <div className="flex bg-muted rounded-lg p-1">
+              <button
+                onClick={() => setMode('login')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  mode === 'login'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Iniciar Sesión
+              </button>
+              <button
+                onClick={() => setMode('invitation')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  mode === 'invitation'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Tengo Invitación
+              </button>
+            </div>
+          )}
 
-          {!isInvitation ? (
+          {mode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="email">Correo electrónico</Label>
@@ -169,16 +228,11 @@ export default function Login() {
                   </>
                 )}
               </Button>
-
-              <p className="text-center text-sm text-muted-foreground">
-                ¿Olvidaste tu contraseña?{' '}
-                <a href="#" className="text-primary hover:underline">
-                  Recuperar
-                </a>
-              </p>
             </form>
-          ) : (
-            <form onSubmit={handleInvitation} className="space-y-6">
+          )}
+
+          {mode === 'invitation' && (
+            <form onSubmit={handleVerifyInvitation} className="space-y-6">
               <div className="text-center space-y-2">
                 <h2 className="text-xl font-semibold">Código de Invitación</h2>
                 <p className="text-muted-foreground text-sm">
@@ -221,14 +275,88 @@ export default function Login() {
             </form>
           )}
 
-          {/* Demo credentials */}
+          {mode === 'register' && (
+            <form onSubmit={handleRegister} className="space-y-6">
+              <div className="text-center space-y-2">
+                <h2 className="text-xl font-semibold">Completar Registro</h2>
+                <p className="text-muted-foreground text-sm">
+                  Crea tu cuenta para: <strong>{invitationEmail}</strong>
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name">Nombre completo</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Tu nombre"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reg-password">Contraseña</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="reg-password"
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                    minLength={6}
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full gap-2"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    Crear Cuenta
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setInvitationEmail('');
+                }}
+                className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ← Volver al inicio de sesión
+              </button>
+            </form>
+          )}
+
+          {/* Info box */}
           <div className="bg-muted/50 rounded-lg p-4 text-sm">
-            <p className="font-medium mb-2">Demo:</p>
+            <p className="font-medium mb-2">Información:</p>
             <p className="text-muted-foreground">
-              Admin: <code className="bg-muted px-1 rounded">admin@demo.com</code>
+              El primer usuario registrado será automáticamente administrador.
             </p>
             <p className="text-muted-foreground">
-              Trabajador: <code className="bg-muted px-1 rounded">cualquier email</code>
+              Los trabajadores necesitan un código de invitación.
             </p>
           </div>
         </div>
