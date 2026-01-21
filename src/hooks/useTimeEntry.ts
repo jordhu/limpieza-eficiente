@@ -1,13 +1,20 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner';
 
 interface ActiveEntry {
   id: string;
   locationId: string;
   locationName: string;
   startTime: Date;
+}
+
+interface CompletedEntry {
+  id: string;
+  locationName: string;
+  startTime: Date;
+  endTime: Date;
+  durationMinutes: number;
 }
 
 interface LocationData {
@@ -22,6 +29,7 @@ interface LocationData {
 export function useTimeEntry() {
   const { user } = useAuth();
   const [activeEntry, setActiveEntry] = useState<ActiveEntry | null>(null);
+  const [todayEntries, setTodayEntries] = useState<CompletedEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Calculate distance between two coordinates using Haversine formula
@@ -94,38 +102,72 @@ export function useTimeEntry() {
     [calculateDistance]
   );
 
-  // Check for active entry on mount
-  const checkActiveEntry = useCallback(async () => {
+  // Fetch today's entries (completed + active)
+  const fetchTodayEntries = useCallback(async () => {
     if (!user) return;
 
     try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayISO = today.toISOString();
+
       const { data, error } = await supabase
         .from('time_entries')
         .select(`
           id,
           location_id,
           start_time,
+          end_time,
           work_locations (name)
         `)
         .eq('user_id', user.id)
-        .is('end_time', null)
-        .order('start_time', { ascending: false })
-        .limit(1)
-        .single();
+        .gte('start_time', todayISO)
+        .order('start_time', { ascending: true });
 
-      if (data && !error) {
-        setActiveEntry({
-          id: data.id,
-          locationId: data.location_id || '',
-          locationName: (data.work_locations as any)?.name || 'Ubicación desconocida',
-          startTime: new Date(data.start_time),
-        });
+      if (error) {
+        console.error('Error fetching today entries:', error);
+        return;
       }
+
+      const completed: CompletedEntry[] = [];
+      let active: ActiveEntry | null = null;
+
+      data?.forEach((entry) => {
+        const locationName = (entry.work_locations as any)?.name || 'Ubicación desconocida';
+        
+        if (entry.end_time) {
+          const start = new Date(entry.start_time);
+          const end = new Date(entry.end_time);
+          const durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
+          
+          completed.push({
+            id: entry.id,
+            locationName,
+            startTime: start,
+            endTime: end,
+            durationMinutes,
+          });
+        } else {
+          active = {
+            id: entry.id,
+            locationId: entry.location_id || '',
+            locationName,
+            startTime: new Date(entry.start_time),
+          };
+        }
+      });
+
+      setTodayEntries(completed);
+      setActiveEntry(active);
     } catch (err) {
-      // No active entry found, which is fine
-      console.log('No active entry found');
+      console.error('Error fetching today entries:', err);
     }
   }, [user]);
+
+  // Check for active entry on mount (legacy - now use fetchTodayEntries)
+  const checkActiveEntry = useCallback(async () => {
+    await fetchTodayEntries();
+  }, [fetchTodayEntries]);
 
   // Clock in
   const clockIn = useCallback(
@@ -137,6 +179,11 @@ export function useTimeEntry() {
     ): Promise<{ success: boolean; error?: string }> => {
       if (!user) {
         return { success: false, error: 'Usuario no autenticado' };
+      }
+
+      // Check if already clocked in somewhere
+      if (activeEntry) {
+        return { success: false, error: `Ya tienes un fichaje activo en ${activeEntry.locationName}. Primero debes fichar salida.` };
       }
 
       setLoading(true);
@@ -188,7 +235,7 @@ export function useTimeEntry() {
         return { success: false, error: 'Error al registrar entrada' };
       }
     },
-    [user, validateLocation]
+    [user, validateLocation, activeEntry]
   );
 
   // Clock out
@@ -199,16 +246,18 @@ export function useTimeEntry() {
       method: 'qr' | 'gps' | 'manual'
     ): Promise<{ success: boolean; error?: string }> => {
       if (!user || !activeEntry) {
-        return { success: false, error: 'No hay jornada activa' };
+        return { success: false, error: 'No hay fichaje activo' };
       }
 
       setLoading(true);
 
       try {
+        const endTime = new Date();
+        
         const { error } = await supabase
           .from('time_entries')
           .update({
-            end_time: new Date().toISOString(),
+            end_time: endTime.toISOString(),
             end_method: method,
             end_lat: userLat,
             end_lng: userLng,
@@ -220,6 +269,16 @@ export function useTimeEntry() {
           setLoading(false);
           return { success: false, error: 'Error al registrar salida' };
         }
+
+        // Add to completed entries
+        const durationMinutes = Math.round((endTime.getTime() - activeEntry.startTime.getTime()) / 60000);
+        setTodayEntries(prev => [...prev, {
+          id: activeEntry.id,
+          locationName: activeEntry.locationName,
+          startTime: activeEntry.startTime,
+          endTime,
+          durationMinutes,
+        }]);
 
         setActiveEntry(null);
         setLoading(false);
@@ -233,12 +292,27 @@ export function useTimeEntry() {
     [user, activeEntry]
   );
 
+  // Get total hours worked today
+  const getTodayTotalMinutes = useCallback(() => {
+    let total = todayEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
+    
+    // Add active entry time
+    if (activeEntry) {
+      total += Math.round((Date.now() - activeEntry.startTime.getTime()) / 60000);
+    }
+    
+    return total;
+  }, [todayEntries, activeEntry]);
+
   return {
     activeEntry,
+    todayEntries,
     loading,
     clockIn,
     clockOut,
     checkActiveEntry,
+    fetchTodayEntries,
     validateLocation,
+    getTodayTotalMinutes,
   };
 }
