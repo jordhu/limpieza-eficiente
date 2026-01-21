@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/auth/Login";
 import Dashboard from "./pages/admin/Dashboard";
 import Locations from "./pages/admin/Locations";
+import Invitations from "./pages/admin/Invitations";
 import WorkerHome from "./pages/worker/WorkerHome";
 import TimeHistory from "./pages/worker/TimeHistory";
 
@@ -44,6 +45,14 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="admin">
                   <Locations />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/invitations" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Invitations />
                 </ProtectedRoute>
               } 
             />
