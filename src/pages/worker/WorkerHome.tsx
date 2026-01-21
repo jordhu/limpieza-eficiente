@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, QrCode, MapPin, CheckCircle, LogOut, History, Home, Timer, Building2, WifiOff, Wifi, List, AlertCircle } from 'lucide-react';
+import { Clock, QrCode, MapPin, CheckCircle, LogOut, History, Home, Timer, Building2, WifiOff, Wifi, List, AlertCircle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { QRScanner } from '@/components/worker/QRScanner';
@@ -9,6 +9,7 @@ import { IncidentReport } from '@/components/worker/IncidentReport';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useTimeEntry } from '@/hooks/useTimeEntry';
 import { useAuth } from '@/hooks/useAuth';
+import { usePhotoUpload } from '@/hooks/usePhotoUpload';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -50,11 +51,16 @@ export default function WorkerHome() {
     fetchTodayEntries,
     getTodayTotalMinutes 
   } = useTimeEntry();
+  
+  const { handlePhotoCapture, syncPendingPhotos } = usePhotoUpload();
 
-  // Fetch entries on mount
+  // Fetch entries on mount and sync photos when online
   useEffect(() => {
     fetchTodayEntries();
-  }, [fetchTodayEntries]);
+    if (navigator.onLine) {
+      syncPendingPhotos();
+    }
+  }, [fetchTodayEntries, syncPendingPhotos]);
 
   // Timer for current entry elapsed time
   useEffect(() => {
@@ -98,13 +104,27 @@ export default function WorkerHome() {
     }
   };
 
-  const handleManualSelect = async (locationId: string, locationName: string, qrCode: string) => {
+  const handleManualSelect = async (locationId: string, locationName: string, qrCode: string, photoBlob?: Blob) => {
     const result = await clockInManual(locationId, locationName, latitude, longitude);
     
     if (result.success) {
-      toast.success(isOnline ? '¡Entrada registrada!' : '¡Entrada guardada (offline)!', {
-        icon: <CheckCircle className="w-5 h-5 text-success" />,
-      });
+      // Upload verification photo if provided
+      if (photoBlob && result.entryId) {
+        const photoResult = await handlePhotoCapture(photoBlob, result.entryId, 'start');
+        if (photoResult.offline) {
+          toast.success('¡Entrada registrada! La foto se sincronizará al recuperar conexión.', {
+            icon: <Camera className="w-5 h-5 text-warning" />,
+          });
+        } else {
+          toast.success(isOnline ? '¡Entrada verificada con foto!' : '¡Entrada guardada (offline)!', {
+            icon: <CheckCircle className="w-5 h-5 text-success" />,
+          });
+        }
+      } else {
+        toast.success(isOnline ? '¡Entrada registrada!' : '¡Entrada guardada (offline)!', {
+          icon: <CheckCircle className="w-5 h-5 text-success" />,
+        });
+      }
     } else {
       toast.error(result.error || 'Error al fichar entrada');
     }

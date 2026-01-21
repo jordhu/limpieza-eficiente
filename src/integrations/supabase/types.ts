@@ -140,6 +140,7 @@ export type Database = {
           end_lat: number | null
           end_lng: number | null
           end_method: Database["public"]["Enums"]["clock_method"] | null
+          end_photo_url: string | null
           end_time: string | null
           id: string
           location_id: string | null
@@ -147,6 +148,7 @@ export type Database = {
           start_lat: number | null
           start_lng: number | null
           start_method: Database["public"]["Enums"]["clock_method"]
+          start_photo_url: string | null
           start_time: string
           synced: boolean
           user_id: string
@@ -156,6 +158,7 @@ export type Database = {
           end_lat?: number | null
           end_lng?: number | null
           end_method?: Database["public"]["Enums"]["clock_method"] | null
+          end_photo_url?: string | null
           end_time?: string | null
           id?: string
           location_id?: string | null
@@ -163,6 +166,7 @@ export type Database = {
           start_lat?: number | null
           start_lng?: number | null
           start_method: Database["public"]["Enums"]["clock_method"]
+          start_photo_url?: string | null
           start_time?: string
           synced?: boolean
           user_id: string
@@ -172,6 +176,7 @@ export type Database = {
           end_lat?: number | null
           end_lng?: number | null
           end_method?: Database["public"]["Enums"]["clock_method"] | null
+          end_photo_url?: string | null
           end_time?: string | null
           id?: string
           location_id?: string | null
@@ -179,6 +184,7 @@ export type Database = {
           start_lat?: number | null
           start_lng?: number | null
           start_method?: Database["public"]["Enums"]["clock_method"]
+          start_photo_url?: string | null
           start_time?: string
           synced?: boolean
           user_id?: string

@@ -417,7 +417,7 @@ export function useTimeEntry() {
       locationName: string,
       userLat: number | null,
       userLng: number | null
-    ): Promise<{ success: boolean; error?: string }> => {
+    ): Promise<{ success: boolean; error?: string; entryId?: string }> => {
       if (!user) {
         return { success: false, error: 'Usuario no autenticado' };
       }
@@ -466,6 +466,9 @@ export function useTimeEntry() {
             userId: user.id,
             startTime: newActive.startTime.toISOString(),
           }));
+          
+          setLoading(false);
+          return { success: true, entryId: data.id };
         } catch (err) {
           console.error('Clock in error:', err);
           setLoading(false);
@@ -490,10 +493,13 @@ export function useTimeEntry() {
           startLng: userLng,
           startMethod: 'manual',
         }));
+        
+        setLoading(false);
+        return { success: true, entryId: entryId };
       }
 
       setLoading(false);
-      return { success: true };
+      return { success: false, error: 'Unexpected error' };
     },
     [user, activeEntry]
   );
