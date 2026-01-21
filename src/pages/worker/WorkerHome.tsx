@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, QrCode, MapPin, CheckCircle, LogOut, History, Home, Timer, Building2 } from 'lucide-react';
+import { Clock, QrCode, MapPin, CheckCircle, LogOut, History, Home, Timer, Building2, WifiOff, Wifi, List, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { QRScanner } from '@/components/worker/QRScanner';
+import { ManualClockIn } from '@/components/worker/ManualClockIn';
 import { IncidentReport } from '@/components/worker/IncidentReport';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useTimeEntry } from '@/hooks/useTimeEntry';
@@ -32,6 +33,7 @@ export default function WorkerHome() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00');
   const [confirmClockOut, setConfirmClockOut] = useState(false);
   
@@ -39,8 +41,11 @@ export default function WorkerHome() {
   const { 
     activeEntry, 
     todayEntries, 
+    pendingSync,
     loading, 
+    isOnline,
     clockIn, 
+    clockInManual,
     clockOut, 
     fetchTodayEntries,
     getTodayTotalMinutes 
@@ -74,8 +79,8 @@ export default function WorkerHome() {
   const handleQRScan = async (code: string) => {
     console.log('QR Code scanned:', code);
     
-    // Ensure we have fresh GPS
-    if (!latitude || !longitude) {
+    // Ensure we have fresh GPS (skip if offline)
+    if (isOnline && (!latitude || !longitude)) {
       requestPosition();
       toast.error('Esperando ubicación GPS...');
       return;
@@ -84,7 +89,7 @@ export default function WorkerHome() {
     const result = await clockIn(code, latitude, longitude, 'qr');
     
     if (result.success) {
-      toast.success('¡Entrada registrada!', {
+      toast.success(isOnline ? '¡Entrada registrada!' : '¡Entrada guardada (offline)!', {
         icon: <CheckCircle className="w-5 h-5 text-success" />,
       });
       setScannerOpen(false);
@@ -93,11 +98,23 @@ export default function WorkerHome() {
     }
   };
 
-  const handleClockOut = async () => {
-    const result = await clockOut(latitude, longitude, 'qr');
+  const handleManualSelect = async (locationId: string, locationName: string, qrCode: string) => {
+    const result = await clockInManual(locationId, locationName, latitude, longitude);
     
     if (result.success) {
-      toast.success('¡Salida registrada!', {
+      toast.success(isOnline ? '¡Entrada registrada!' : '¡Entrada guardada (offline)!', {
+        icon: <CheckCircle className="w-5 h-5 text-success" />,
+      });
+    } else {
+      toast.error(result.error || 'Error al fichar entrada');
+    }
+  };
+
+  const handleClockOut = async () => {
+    const result = await clockOut(latitude, longitude, 'manual');
+    
+    if (result.success) {
+      toast.success(isOnline ? '¡Salida registrada!' : '¡Salida guardada (offline)!', {
         icon: <CheckCircle className="w-5 h-5 text-success" />,
       });
     } else {
@@ -142,36 +159,68 @@ export default function WorkerHome() {
               <p className="text-xs text-muted-foreground capitalize">{today}</p>
             </div>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs bg-muted">
-                    {user?.email?.charAt(0).toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => navigate('/worker/history')}>
-                <History className="w-4 h-4 mr-2" />
-                Historial
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={async () => {
-                  await signOut();
-                  navigate('/login');
-                }}
-                className="text-destructive focus:text-destructive"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Cerrar Sesión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            {/* Connection Status */}
+            <div className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded-full text-xs",
+              isOnline ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+            )}>
+              {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {pendingSync.length > 0 && (
+                <span className="font-medium">{pendingSync.length}</span>
+              )}
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs bg-muted">
+                      {user?.email?.charAt(0).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => navigate('/worker/history')}>
+                  <History className="w-4 h-4 mr-2" />
+                  Historial
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={async () => {
+                    await signOut();
+                    navigate('/login');
+                  }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Cerrar Sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
+
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="bg-warning/10 border-b border-warning/20 px-4 py-2">
+          <div className="max-w-lg mx-auto flex items-center gap-2 text-warning text-sm">
+            <WifiOff className="w-4 h-4" />
+            <span>Sin conexión - Los fichajes se sincronizarán automáticamente</span>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Sync Banner */}
+      {isOnline && pendingSync.length > 0 && (
+        <div className="bg-primary/10 border-b border-primary/20 px-4 py-2">
+          <div className="max-w-lg mx-auto flex items-center gap-2 text-primary text-sm">
+            <AlertCircle className="w-4 h-4" />
+            <span>Sincronizando {pendingSync.length} fichajes pendientes...</span>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
@@ -204,19 +253,44 @@ export default function WorkerHome() {
 
         {/* Active Entry Card */}
         {activeEntry ? (
-          <Card className="border-2 border-primary bg-gradient-to-br from-primary/5 to-primary/10">
+          <Card className={cn(
+            "border-2 bg-gradient-to-br",
+            activeEntry.isOffline 
+              ? "border-warning from-warning/5 to-warning/10" 
+              : "border-primary from-primary/5 to-primary/10"
+          )}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <Badge variant="default" className="bg-primary animate-pulse">
-                  En curso
-                </Badge>
-                <span className="text-2xl font-mono font-bold text-primary">{elapsedTime}</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="default" className={cn(
+                    "animate-pulse",
+                    activeEntry.isOffline ? "bg-warning" : "bg-primary"
+                  )}>
+                    En curso
+                  </Badge>
+                  {activeEntry.isOffline && (
+                    <Badge variant="outline" className="border-warning text-warning">
+                      <WifiOff className="w-3 h-3 mr-1" />
+                      Offline
+                    </Badge>
+                  )}
+                </div>
+                <span className={cn(
+                  "text-2xl font-mono font-bold",
+                  activeEntry.isOffline ? "text-warning" : "text-primary"
+                )}>{elapsedTime}</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                  <Home className="w-6 h-6 text-primary" />
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center",
+                  activeEntry.isOffline ? "bg-warning/20" : "bg-primary/20"
+                )}>
+                  <Home className={cn(
+                    "w-6 h-6",
+                    activeEntry.isOffline ? "text-warning" : "text-primary"
+                  )} />
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-lg">{activeEntry.locationName}</p>
@@ -240,35 +314,58 @@ export default function WorkerHome() {
             </CardContent>
           </Card>
         ) : (
-          /* Scan QR Card */
-          <Card 
-            className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors cursor-pointer"
-            onClick={() => setScannerOpen(true)}
-          >
-            <CardContent className="p-8 flex flex-col items-center gap-4 text-center">
-              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-                <QrCode className="w-10 h-10 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-lg">Escanear QR para Fichar</p>
-                <p className="text-sm text-muted-foreground">
-                  Escanea el código del alojamiento para registrar tu entrada
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <MapPin className="w-4 h-4" />
-                {geoError ? (
-                  <span className="text-destructive">{geoError}</span>
-                ) : geoLoading ? (
-                  <span className="text-muted-foreground">Obteniendo ubicación...</span>
-                ) : latitude && longitude ? (
-                  <span className="text-success">GPS activo ✓</span>
-                ) : (
-                  <span className="text-muted-foreground">Esperando GPS...</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          /* Clock In Options */
+          <div className="space-y-3">
+            {/* Scan QR Card */}
+            <Card 
+              className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors cursor-pointer"
+              onClick={() => setScannerOpen(true)}
+            >
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <QrCode className="w-7 h-7 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">Escanear Código QR</p>
+                  <p className="text-sm text-muted-foreground">
+                    Escanea el QR del alojamiento
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Manual Select Card */}
+            <Card 
+              className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors cursor-pointer"
+              onClick={() => setManualOpen(true)}
+            >
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <List className="w-7 h-7 text-muted-foreground" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">Seleccionar de la Lista</p>
+                  <p className="text-sm text-muted-foreground">
+                    Si no encuentras el QR o no funciona
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* GPS Status */}
+            <div className="flex items-center justify-center gap-2 text-sm py-2">
+              <MapPin className="w-4 h-4" />
+              {geoError ? (
+                <span className="text-destructive">{geoError}</span>
+              ) : geoLoading ? (
+                <span className="text-muted-foreground">Obteniendo ubicación...</span>
+              ) : latitude && longitude ? (
+                <span className="text-success">GPS activo ✓</span>
+              ) : (
+                <span className="text-muted-foreground">Esperando GPS...</span>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Today's Completed Entries */}
@@ -284,9 +381,7 @@ export default function WorkerHome() {
               {todayEntries.map((entry) => (
                 <div 
                   key={entry.id}
-                  className={cn(
-                    "flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                  )}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
@@ -317,10 +412,10 @@ export default function WorkerHome() {
                 ¿Cómo funciona?
               </h3>
               <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-                <li>Al llegar al alojamiento, escanea su código QR</li>
-                <li>El sistema validará tu ubicación GPS</li>
+                <li>Al llegar, escanea el QR o selecciona el alojamiento</li>
+                <li>Si tienes señal, se validará tu ubicación GPS</li>
                 <li>Cuando termines, pulsa "Fichar Salida"</li>
-                <li>Repite para cada alojamiento del día</li>
+                <li>Sin señal, los fichajes se guardan y sincronizan luego</li>
               </ol>
             </CardContent>
           </Card>
@@ -332,6 +427,14 @@ export default function WorkerHome() {
         open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onScan={handleQRScan}
+      />
+
+      {/* Manual Clock In Modal */}
+      <ManualClockIn
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        onSelect={handleManualSelect}
+        isOffline={!isOnline}
       />
 
       {/* Confirm Clock Out Dialog */}
