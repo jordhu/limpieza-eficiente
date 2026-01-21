@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { MapPin, Plus, QrCode, Trash2, Navigation, Loader2 } from 'lucide-react';
 import { LocationQRCode } from '@/components/locations/LocationQRCode';
+import { LocationMap } from '@/components/locations/LocationMap';
 
 interface WorkLocation {
   id: string;
@@ -191,13 +192,12 @@ export default function Locations() {
 // Location Form Component
 function LocationForm({ onSuccess }: { onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
-  const [gettingLocation, setGettingLocation] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
-    latitude: '',
-    longitude: '',
-    radius_meters: '100',
+    latitude: null as number | null,
+    longitude: null as number | null,
+    radius_meters: 100,
   });
   const queryClient = useQueryClient();
 
@@ -211,33 +211,23 @@ function LocationForm({ onSuccess }: { onSuccess: () => void }) {
     return code;
   };
 
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocalización no soportada');
-      return;
-    }
-
-    setGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setFormData((prev) => ({
-          ...prev,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
-        }));
-        setGettingLocation(false);
-        toast.success('Ubicación obtenida');
-      },
-      (error) => {
-        setGettingLocation(false);
-        toast.error('Error al obtener ubicación: ' + error.message);
-      },
-      { enableHighAccuracy: true }
-    );
+  const handleLocationChange = (lat: number, lng: number, address?: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      ...(address ? { address } : {}),
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.latitude || !formData.longitude) {
+      toast.error('Selecciona una ubicación en el mapa');
+      return;
+    }
+    
     setLoading(true);
 
     const qrCode = generateQRCode();
@@ -245,9 +235,9 @@ function LocationForm({ onSuccess }: { onSuccess: () => void }) {
     const { error } = await supabase.from('work_locations').insert({
       name: formData.name,
       address: formData.address,
-      latitude: parseFloat(formData.latitude),
-      longitude: parseFloat(formData.longitude),
-      radius_meters: parseInt(formData.radius_meters),
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+      radius_meters: formData.radius_meters,
       qr_code: qrCode,
     });
 
@@ -269,10 +259,21 @@ function LocationForm({ onSuccess }: { onSuccess: () => void }) {
         <Label htmlFor="name">Nombre del lugar</Label>
         <Input
           id="name"
-          placeholder="Ej: Oficina Central"
+          placeholder="Ej: Apartamento Mar Azul"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           required
+        />
+      </div>
+
+      {/* Map with search */}
+      <div className="space-y-2">
+        <Label>Ubicación</Label>
+        <LocationMap
+          latitude={formData.latitude}
+          longitude={formData.longitude}
+          radius={formData.radius_meters}
+          onLocationChange={handleLocationChange}
         />
       </div>
 
@@ -280,78 +281,41 @@ function LocationForm({ onSuccess }: { onSuccess: () => void }) {
         <Label htmlFor="address">Dirección</Label>
         <Input
           id="address"
-          placeholder="Ej: Calle Principal 123"
+          placeholder="Se rellena automáticamente o escríbela"
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
           required
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="latitude">Latitud</Label>
-          <Input
-            id="latitude"
-            type="number"
-            step="any"
-            placeholder="40.416775"
-            value={formData.latitude}
-            onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-            required
-          />
+      {/* Show coordinates if selected */}
+      {formData.latitude && formData.longitude && (
+        <div className="p-3 bg-muted rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium">Coordenadas:</span>{' '}
+            {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+          </p>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="longitude">Longitud</Label>
-          <Input
-            id="longitude"
-            type="number"
-            step="any"
-            placeholder="-3.703790"
-            value={formData.longitude}
-            onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full gap-2"
-        onClick={getCurrentLocation}
-        disabled={gettingLocation}
-      >
-        {gettingLocation ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Obteniendo...
-          </>
-        ) : (
-          <>
-            <Navigation className="w-4 h-4" />
-            Usar mi ubicación actual
-          </>
-        )}
-      </Button>
+      )}
 
       <div className="space-y-2">
-        <Label htmlFor="radius">Radio permitido (metros)</Label>
+        <Label htmlFor="radius">Radio permitido (metros): {formData.radius_meters}m</Label>
         <Input
           id="radius"
-          type="number"
-          min="10"
-          max="1000"
-          placeholder="100"
+          type="range"
+          min="20"
+          max="500"
+          step="10"
           value={formData.radius_meters}
-          onChange={(e) => setFormData({ ...formData, radius_meters: e.target.value })}
-          required
+          onChange={(e) => setFormData({ ...formData, radius_meters: parseInt(e.target.value) })}
+          className="cursor-pointer"
         />
         <p className="text-xs text-muted-foreground">
           Distancia máxima desde el punto para permitir fichaje
         </p>
       </div>
 
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading || !formData.latitude}>
         {loading ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
