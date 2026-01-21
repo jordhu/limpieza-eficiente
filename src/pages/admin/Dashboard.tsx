@@ -5,9 +5,9 @@ import { WorkersList } from '@/components/dashboard/WorkersList';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { Users, Clock, MapPin, AlertTriangle, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { FileDown } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ExportReportDialog } from '@/components/dashboard/ExportReportDialog';
 
 export default function Dashboard() {
   const { stats, activeWorkers, recentActivity, loading, refresh } = useDashboardData();
@@ -54,10 +54,7 @@ export default function Dashboard() {
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Actualizar</span>
             </Button>
-            <Button variant="default" className="gap-2">
-              <FileDown className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar</span>
-            </Button>
+            <ExportReportDialog />
           </div>
         </div>
 
