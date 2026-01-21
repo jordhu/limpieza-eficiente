@@ -15,7 +15,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'login' | 'invitation' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'invitation' | 'register'>('login');
   const [invitationCode, setInvitationCode] = useState('');
   const [invitationEmail, setInvitationEmail] = useState('');
 
@@ -161,7 +161,17 @@ export default function Login() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Iniciar Sesión
+                Entrar
+              </button>
+              <button
+                onClick={() => setMode('signup')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  mode === 'signup'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Registrarse
               </button>
               <button
                 onClick={() => setMode('invitation')}
@@ -171,7 +181,7 @@ export default function Login() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                Tengo Invitación
+                Invitación
               </button>
             </div>
           )}
@@ -224,6 +234,85 @@ export default function Login() {
                 ) : (
                   <>
                     Entrar
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+          )}
+
+          {mode === 'signup' && (
+            <form onSubmit={handleRegister} className="space-y-6">
+              <div className="text-center space-y-2">
+                <h2 className="text-xl font-semibold">Crear Cuenta</h2>
+                <p className="text-muted-foreground text-sm">
+                  El primer usuario registrado será administrador
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="signup-email">Correo electrónico</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="tu@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="signup-name">Nombre completo</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="signup-name"
+                    type="text"
+                    placeholder="Tu nombre"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="signup-password">Contraseña</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                    minLength={6}
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full gap-2"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    Crear Cuenta
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
