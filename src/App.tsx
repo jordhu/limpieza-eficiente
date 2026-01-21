@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/auth/Login";
 import Dashboard from "./pages/admin/Dashboard";
+import Locations from "./pages/admin/Locations";
 import WorkerHome from "./pages/worker/WorkerHome";
 
 // Protected Route Components
@@ -34,6 +35,14 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="admin">
                   <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/locations" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Locations />
                 </ProtectedRoute>
               } 
             />
