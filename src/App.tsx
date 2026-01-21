@@ -15,6 +15,7 @@ import Invitations from "./pages/admin/Invitations";
 import Incidents from "./pages/admin/Incidents";
 import Workers from "./pages/admin/Workers";
 import TimeEntries from "./pages/admin/TimeEntries";
+import Settings from "./pages/admin/Settings";
 import WorkerHome from "./pages/worker/WorkerHome";
 import TimeHistory from "./pages/worker/TimeHistory";
 
@@ -80,6 +81,14 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="admin">
                   <TimeEntries />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/settings" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Settings />
                 </ProtectedRoute>
               } 
             />
