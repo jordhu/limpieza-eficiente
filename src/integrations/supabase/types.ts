@@ -59,6 +59,13 @@ export type Database = {
             referencedRelation: "work_locations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "incidents_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       invitations: {
@@ -183,6 +190,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "work_locations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_entries_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
