@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, QrCode, MapPin, Calendar, History, AlertCircle, CheckCircle, LogOut, User } from 'lucide-react';
+import { Clock, QrCode, MapPin, CheckCircle, LogOut, History, Home, Timer, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ClockInButton } from '@/components/worker/ClockInButton';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { QRScanner } from '@/components/worker/QRScanner';
 import { IncidentReport } from '@/components/worker/IncidentReport';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -25,27 +25,33 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 export default function WorkerHome() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    type: 'clock-in' | 'clock-out';
-    qrCode?: string;
-  }>({ open: false, type: 'clock-in' });
+  const [elapsedTime, setElapsedTime] = useState('00:00');
+  const [confirmClockOut, setConfirmClockOut] = useState(false);
   
   const { latitude, longitude, error: geoError, loading: geoLoading, requestPosition } = useGeolocation(true);
-  const { activeEntry, loading, clockIn, clockOut, checkActiveEntry } = useTimeEntry();
+  const { 
+    activeEntry, 
+    todayEntries, 
+    loading, 
+    clockIn, 
+    clockOut, 
+    fetchTodayEntries,
+    getTodayTotalMinutes 
+  } = useTimeEntry();
 
-  // Check for active entry on mount
+  // Fetch entries on mount
   useEffect(() => {
-    checkActiveEntry();
-  }, [checkActiveEntry]);
+    fetchTodayEntries();
+  }, [fetchTodayEntries]);
 
-  // Timer for elapsed time
+  // Timer for current entry elapsed time
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (activeEntry) {
@@ -53,32 +59,21 @@ export default function WorkerHome() {
         const diff = Date.now() - activeEntry.startTime.getTime();
         const hours = Math.floor(diff / 3600000);
         const minutes = Math.floor((diff % 3600000) / 60000);
-        const seconds = Math.floor((diff % 60000) / 1000);
         setElapsedTime(
-          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
         );
       };
       updateTimer();
       interval = setInterval(updateTimer, 1000);
     } else {
-      setElapsedTime('00:00:00');
+      setElapsedTime('00:00');
     }
     return () => clearInterval(interval);
   }, [activeEntry]);
 
-  const handleQRScan = (code: string) => {
+  const handleQRScan = async (code: string) => {
     console.log('QR Code scanned:', code);
     
-    if (activeEntry) {
-      // Already working, show confirmation for clock out
-      setConfirmDialog({ open: true, type: 'clock-out', qrCode: code });
-    } else {
-      // Not working, proceed with clock in
-      handleClockIn(code);
-    }
-  };
-
-  const handleClockIn = async (qrCode: string) => {
     // Ensure we have fresh GPS
     if (!latitude || !longitude) {
       requestPosition();
@@ -86,188 +81,250 @@ export default function WorkerHome() {
       return;
     }
 
-    const result = await clockIn(qrCode, latitude, longitude, 'qr');
+    const result = await clockIn(code, latitude, longitude, 'qr');
     
     if (result.success) {
-      toast.success('¡Jornada iniciada correctamente!', {
+      toast.success('¡Entrada registrada!', {
         icon: <CheckCircle className="w-5 h-5 text-success" />,
       });
+      setScannerOpen(false);
     } else {
-      toast.error(result.error || 'Error al fichar entrada', {
-        icon: <AlertCircle className="w-5 h-5" />,
-      });
+      toast.error(result.error || 'Error al fichar entrada');
     }
   };
 
   const handleClockOut = async () => {
-    const result = await clockOut(latitude, longitude, 'manual');
+    const result = await clockOut(latitude, longitude, 'qr');
     
     if (result.success) {
-      toast.success('¡Jornada finalizada!', {
+      toast.success('¡Salida registrada!', {
         icon: <CheckCircle className="w-5 h-5 text-success" />,
       });
     } else {
-      toast.error(result.error || 'Error al fichar salida', {
-        icon: <AlertCircle className="w-5 h-5" />,
-      });
+      toast.error(result.error || 'Error al fichar salida');
     }
     
-    setConfirmDialog({ open: false, type: 'clock-out' });
+    setConfirmClockOut(false);
   };
 
-  const handleManualClockOut = () => {
-    setConfirmDialog({ open: true, type: 'clock-out' });
+  // Format minutes to hours:minutes
+  const formatDuration = (minutes: number) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m}m`;
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   };
 
   // Today's date formatted
   const today = new Date().toLocaleDateString('es-ES', {
     weekday: 'long',
-    year: 'numeric',
-    month: 'long',
     day: 'numeric',
+    month: 'long',
   });
+
+  const totalMinutes = getTodayTotalMinutes();
+  const totalLocations = todayEntries.length + (activeEntry ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border px-6 py-4">
+      <header className="bg-card border-b border-border px-4 py-3 sticky top-0 z-10">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Clock className="w-5 h-5 text-primary-foreground" />
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+              <Clock className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-bold text-lg">CleanTrack</h1>
+              <h1 className="font-bold text-base">CleanTrack</h1>
               <p className="text-xs text-muted-foreground capitalize">{today}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs">
-                      {user?.email?.charAt(0).toUpperCase() || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="hidden sm:inline text-sm">{user?.email?.split('@')[0]}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => navigate('/worker/history')}>
-                  <History className="w-4 h-4 mr-2" />
-                  Historial
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={async () => {
-                    await signOut();
-                    navigate('/login');
-                  }}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Cerrar Sesión
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="text-xs bg-muted">
+                    {user?.email?.charAt(0).toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => navigate('/worker/history')}>
+                <History className="w-4 h-4 mr-2" />
+                Historial
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={async () => {
+                  await signOut();
+                  navigate('/login');
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Cerrar Sesión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-lg mx-auto px-6 py-8 space-y-8">
-        {/* Timer Display */}
-        {activeEntry && (
-          <div className="text-center animate-fade-in">
-            <p className="text-sm text-muted-foreground mb-1">Tiempo trabajado</p>
-            <p className="text-5xl font-mono font-bold tracking-tight text-primary">
-              {elapsedTime}
-            </p>
-          </div>
-        )}
-
-        {/* Clock In/Out Button */}
-        <ClockInButton
-          isWorking={!!activeEntry}
-          currentLocation={activeEntry?.locationName}
-          isOnline={navigator.onLine}
-          pendingSync={0}
-          onClockIn={() => setScannerOpen(true)}
-          onClockOut={handleManualClockOut}
-          loading={loading}
-        />
-
-        {/* Quick Actions */}
-        {!activeEntry && (
-          <div className="space-y-3 animate-slide-up">
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full gap-3"
-              onClick={() => setScannerOpen(true)}
-            >
-              <QrCode className="w-5 h-5" />
-              Escanear Código QR para Fichar
-            </Button>
-            
-            <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center">
-              <MapPin className="w-4 h-4" />
-              {geoError ? (
-                <span className="text-destructive">{geoError}</span>
-              ) : geoLoading ? (
-                <span>Obteniendo ubicación...</span>
-              ) : latitude && longitude ? (
-                <span className="text-success">GPS activo ✓</span>
-              ) : (
-                <span>Esperando GPS...</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Incident Report (only when working) */}
-        {activeEntry && (
-          <div className="animate-slide-up">
-            <IncidentReport locationName={activeEntry.locationName} />
-          </div>
-        )}
-
-        {/* Instructions Card */}
-        <div className="card-elevated p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <QrCode className="w-5 h-5 text-muted-foreground" />
-            <h3 className="font-semibold">¿Cómo fichar?</h3>
-          </div>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            <li>Pulsa el botón grande o "Escanear Código QR"</li>
-            <li>Apunta la cámara al código QR de tu ubicación de trabajo</li>
-            <li>El sistema validará que estás dentro del área permitida</li>
-            <li>Tu jornada comenzará automáticamente</li>
-          </ol>
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        
+        {/* Stats Summary */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Timer className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-primary">{formatDuration(totalMinutes)}</p>
+                <p className="text-xs text-muted-foreground">Tiempo hoy</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-success/5 border-success/20">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-success" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-success">{totalLocations}</p>
+                <p className="text-xs text-muted-foreground">Alojamientos</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Today's Summary */}
-        <div className="card-elevated p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-muted-foreground" />
-            <h3 className="font-semibold">Resumen de Hoy</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-primary">
-                {activeEntry ? elapsedTime.split(':')[0] : '0'}
-              </p>
-              <p className="text-sm text-muted-foreground">Horas hoy</p>
-            </div>
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-success">
-                {activeEntry ? '1' : '0'}
-              </p>
-              <p className="text-sm text-muted-foreground">Ubicaciones</p>
-            </div>
-          </div>
-        </div>
+        {/* Active Entry Card */}
+        {activeEntry ? (
+          <Card className="border-2 border-primary bg-gradient-to-br from-primary/5 to-primary/10">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <Badge variant="default" className="bg-primary animate-pulse">
+                  En curso
+                </Badge>
+                <span className="text-2xl font-mono font-bold text-primary">{elapsedTime}</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                  <Home className="w-6 h-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-lg">{activeEntry.locationName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Entrada: {formatTime(activeEntry.startTime)}
+                  </p>
+                </div>
+              </div>
+              
+              <Button 
+                variant="destructive" 
+                className="w-full"
+                onClick={() => setConfirmClockOut(true)}
+                disabled={loading}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Terminar y Fichar Salida
+              </Button>
+
+              <IncidentReport locationName={activeEntry.locationName} />
+            </CardContent>
+          </Card>
+        ) : (
+          /* Scan QR Card */
+          <Card 
+            className="border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 transition-colors cursor-pointer"
+            onClick={() => setScannerOpen(true)}
+          >
+            <CardContent className="p-8 flex flex-col items-center gap-4 text-center">
+              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                <QrCode className="w-10 h-10 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-lg">Escanear QR para Fichar</p>
+                <p className="text-sm text-muted-foreground">
+                  Escanea el código del alojamiento para registrar tu entrada
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="w-4 h-4" />
+                {geoError ? (
+                  <span className="text-destructive">{geoError}</span>
+                ) : geoLoading ? (
+                  <span className="text-muted-foreground">Obteniendo ubicación...</span>
+                ) : latitude && longitude ? (
+                  <span className="text-success">GPS activo ✓</span>
+                ) : (
+                  <span className="text-muted-foreground">Esperando GPS...</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Today's Completed Entries */}
+        {todayEntries.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-success" />
+                Alojamientos completados hoy
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {todayEntries.map((entry) => (
+                <div 
+                  key={entry.id}
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
+                      <Home className="w-4 h-4 text-success" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{entry.locationName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatTime(entry.startTime)} - {formatTime(entry.endTime)}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {formatDuration(entry.durationMinutes)}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Instructions */}
+        {!activeEntry && todayEntries.length === 0 && (
+          <Card className="bg-muted/30">
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <QrCode className="w-4 h-4" />
+                ¿Cómo funciona?
+              </h3>
+              <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+                <li>Al llegar al alojamiento, escanea su código QR</li>
+                <li>El sistema validará tu ubicación GPS</li>
+                <li>Cuando termines, pulsa "Fichar Salida"</li>
+                <li>Repite para cada alojamiento del día</li>
+              </ol>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       {/* QR Scanner Modal */}
@@ -277,29 +334,36 @@ export default function WorkerHome() {
         onScan={handleQRScan}
       />
 
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}>
+      {/* Confirm Clock Out Dialog */}
+      <Dialog open={confirmClockOut} onOpenChange={setConfirmClockOut}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {confirmDialog.type === 'clock-out' ? 'Finalizar Jornada' : 'Iniciar Jornada'}
-            </DialogTitle>
+            <DialogTitle>Fichar Salida</DialogTitle>
             <DialogDescription>
-              {confirmDialog.type === 'clock-out'
-                ? `¿Estás seguro de que quieres finalizar tu jornada en ${activeEntry?.locationName}?`
-                : 'Confirma para iniciar tu jornada de trabajo.'}
+              ¿Has terminado de limpiar {activeEntry?.locationName}?
             </DialogDescription>
           </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+              <div>
+                <p className="font-medium">{activeEntry?.locationName}</p>
+                <p className="text-sm text-muted-foreground">
+                  Tiempo trabajado: {elapsedTime}
+                </p>
+              </div>
+              <CheckCircle className="w-8 h-8 text-success" />
+            </div>
+          </div>
           <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>
+            <Button variant="outline" onClick={() => setConfirmClockOut(false)}>
               Cancelar
             </Button>
             <Button 
-              variant={confirmDialog.type === 'clock-out' ? 'destructive' : 'default'}
+              variant="default"
               onClick={handleClockOut}
               disabled={loading}
             >
-              {loading ? 'Procesando...' : confirmDialog.type === 'clock-out' ? 'Finalizar' : 'Confirmar'}
+              {loading ? 'Procesando...' : 'Confirmar Salida'}
             </Button>
           </DialogFooter>
         </DialogContent>
