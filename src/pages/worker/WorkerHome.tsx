@@ -1,81 +1,112 @@
 import { useState, useEffect } from 'react';
-import { Clock, QrCode, MapPin, Calendar, History } from 'lucide-react';
+import { Clock, QrCode, MapPin, Calendar, History, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ClockInButton } from '@/components/worker/ClockInButton';
 import { QRScanner } from '@/components/worker/QRScanner';
 import { IncidentReport } from '@/components/worker/IncidentReport';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { useOfflineStorage } from '@/hooks/useOfflineStorage';
+import { useTimeEntry } from '@/hooks/useTimeEntry';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 export default function WorkerHome() {
-  const [isWorking, setIsWorking] = useState(false);
+  const { user } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [startTime, setStartTime] = useState<Date | null>(null);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [currentLocation] = useState('Oficina Central');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    type: 'clock-in' | 'clock-out';
+    qrCode?: string;
+  }>({ open: false, type: 'clock-in' });
   
-  const { latitude, longitude, error: geoError, isNearLocation } = useGeolocation(true);
-  const { isOnline, getPendingCount, saveEntry } = useOfflineStorage();
+  const { latitude, longitude, error: geoError, loading: geoLoading, requestPosition } = useGeolocation(true);
+  const { activeEntry, loading, clockIn, clockOut, checkActiveEntry } = useTimeEntry();
+
+  // Check for active entry on mount
+  useEffect(() => {
+    checkActiveEntry();
+  }, [checkActiveEntry]);
 
   // Timer for elapsed time
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isWorking && startTime) {
-      interval = setInterval(() => {
-        const diff = Date.now() - startTime.getTime();
+    if (activeEntry) {
+      const updateTimer = () => {
+        const diff = Date.now() - activeEntry.startTime.getTime();
         const hours = Math.floor(diff / 3600000);
         const minutes = Math.floor((diff % 3600000) / 60000);
         const seconds = Math.floor((diff % 60000) / 1000);
         setElapsedTime(
           `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
         );
-      }, 1000);
+      };
+      updateTimer();
+      interval = setInterval(updateTimer, 1000);
+    } else {
+      setElapsedTime('00:00:00');
     }
     return () => clearInterval(interval);
-  }, [isWorking, startTime]);
+  }, [activeEntry]);
 
   const handleQRScan = (code: string) => {
     console.log('QR Code scanned:', code);
-    handleClockIn('qr');
+    
+    if (activeEntry) {
+      // Already working, show confirmation for clock out
+      setConfirmDialog({ open: true, type: 'clock-out', qrCode: code });
+    } else {
+      // Not working, proceed with clock in
+      handleClockIn(code);
+    }
   };
 
-  const handleClockIn = (method: 'qr' | 'gps' | 'manual') => {
-    setLoading(true);
+  const handleClockIn = async (qrCode: string) => {
+    // Ensure we have fresh GPS
+    if (!latitude || !longitude) {
+      requestPosition();
+      toast.error('Esperando ubicación GPS...');
+      return;
+    }
+
+    const result = await clockIn(qrCode, latitude, longitude, 'qr');
     
-    setTimeout(() => {
-      const now = new Date();
-      setStartTime(now);
-      setIsWorking(true);
-      setLoading(false);
-      
-      saveEntry({
-        id: crypto.randomUUID(),
-        userId: 'user-1',
-        userName: 'Usuario Demo',
-        locationId: 'loc-1',
-        locationName: currentLocation,
-        startTime: now,
-        startMethod: method,
-        startCoords: latitude && longitude ? { lat: latitude, lng: longitude } : undefined,
-        synced: isOnline,
+    if (result.success) {
+      toast.success('¡Jornada iniciada correctamente!', {
+        icon: <CheckCircle className="w-5 h-5 text-success" />,
       });
-      
-      toast.success(`Jornada iniciada (${method.toUpperCase()})`);
-    }, 1000);
+    } else {
+      toast.error(result.error || 'Error al fichar entrada', {
+        icon: <AlertCircle className="w-5 h-5" />,
+      });
+    }
   };
 
-  const handleClockOut = () => {
-    setLoading(true);
+  const handleClockOut = async () => {
+    const result = await clockOut(latitude, longitude, 'manual');
     
-    setTimeout(() => {
-      setIsWorking(false);
-      setLoading(false);
-      setStartTime(null);
-      setElapsedTime('00:00:00');
-      toast.success('Jornada finalizada');
-    }, 1000);
+    if (result.success) {
+      toast.success('¡Jornada finalizada!', {
+        icon: <CheckCircle className="w-5 h-5 text-success" />,
+      });
+    } else {
+      toast.error(result.error || 'Error al fichar salida', {
+        icon: <AlertCircle className="w-5 h-5" />,
+      });
+    }
+    
+    setConfirmDialog({ open: false, type: 'clock-out' });
+  };
+
+  const handleManualClockOut = () => {
+    setConfirmDialog({ open: true, type: 'clock-out' });
   };
 
   // Today's date formatted
@@ -100,16 +131,19 @@ export default function WorkerHome() {
               <p className="text-xs text-muted-foreground capitalize">{today}</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon">
-            <History className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{user?.email?.split('@')[0]}</span>
+            <Button variant="ghost" size="icon">
+              <History className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-lg mx-auto px-6 py-8 space-y-8">
         {/* Timer Display */}
-        {isWorking && (
+        {activeEntry && (
           <div className="text-center animate-fade-in">
             <p className="text-sm text-muted-foreground mb-1">Tiempo trabajado</p>
             <p className="text-5xl font-mono font-bold tracking-tight text-primary">
@@ -120,17 +154,17 @@ export default function WorkerHome() {
 
         {/* Clock In/Out Button */}
         <ClockInButton
-          isWorking={isWorking}
-          currentLocation={isWorking ? currentLocation : undefined}
-          isOnline={isOnline}
-          pendingSync={getPendingCount()}
-          onClockIn={() => handleClockIn('manual')}
-          onClockOut={handleClockOut}
+          isWorking={!!activeEntry}
+          currentLocation={activeEntry?.locationName}
+          isOnline={navigator.onLine}
+          pendingSync={0}
+          onClockIn={() => setScannerOpen(true)}
+          onClockOut={handleManualClockOut}
           loading={loading}
         />
 
         {/* Quick Actions */}
-        {!isWorking && (
+        {!activeEntry && (
           <div className="space-y-3 animate-slide-up">
             <Button
               variant="outline"
@@ -139,28 +173,44 @@ export default function WorkerHome() {
               onClick={() => setScannerOpen(true)}
             >
               <QrCode className="w-5 h-5" />
-              Escanear Código QR
+              Escanear Código QR para Fichar
             </Button>
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center">
               <MapPin className="w-4 h-4" />
               {geoError ? (
                 <span className="text-destructive">{geoError}</span>
-              ) : latitude && longitude ? (
-                <span>GPS activo ({latitude.toFixed(4)}, {longitude.toFixed(4)})</span>
-              ) : (
+              ) : geoLoading ? (
                 <span>Obteniendo ubicación...</span>
+              ) : latitude && longitude ? (
+                <span className="text-success">GPS activo ✓</span>
+              ) : (
+                <span>Esperando GPS...</span>
               )}
             </div>
           </div>
         )}
 
         {/* Incident Report (only when working) */}
-        {isWorking && (
+        {activeEntry && (
           <div className="animate-slide-up">
-            <IncidentReport locationName={currentLocation} />
+            <IncidentReport locationName={activeEntry.locationName} />
           </div>
         )}
+
+        {/* Instructions Card */}
+        <div className="card-elevated p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-5 h-5 text-muted-foreground" />
+            <h3 className="font-semibold">¿Cómo fichar?</h3>
+          </div>
+          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+            <li>Pulsa el botón grande o "Escanear Código QR"</li>
+            <li>Apunta la cámara al código QR de tu ubicación de trabajo</li>
+            <li>El sistema validará que estás dentro del área permitida</li>
+            <li>Tu jornada comenzará automáticamente</li>
+          </ol>
+        </div>
 
         {/* Today's Summary */}
         <div className="card-elevated p-6 space-y-4">
@@ -170,11 +220,15 @@ export default function WorkerHome() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-primary">6.5</p>
-              <p className="text-sm text-muted-foreground">Horas trabajadas</p>
+              <p className="text-3xl font-bold text-primary">
+                {activeEntry ? elapsedTime.split(':')[0] : '0'}
+              </p>
+              <p className="text-sm text-muted-foreground">Horas hoy</p>
             </div>
             <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-success">2</p>
+              <p className="text-3xl font-bold text-success">
+                {activeEntry ? '1' : '0'}
+              </p>
               <p className="text-sm text-muted-foreground">Ubicaciones</p>
             </div>
           </div>
@@ -187,6 +241,34 @@ export default function WorkerHome() {
         onClose={() => setScannerOpen(false)}
         onScan={handleQRScan}
       />
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirmDialog.type === 'clock-out' ? 'Finalizar Jornada' : 'Iniciar Jornada'}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmDialog.type === 'clock-out'
+                ? `¿Estás seguro de que quieres finalizar tu jornada en ${activeEntry?.locationName}?`
+                : 'Confirma para iniciar tu jornada de trabajo.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}>
+              Cancelar
+            </Button>
+            <Button 
+              variant={confirmDialog.type === 'clock-out' ? 'destructive' : 'default'}
+              onClick={handleClockOut}
+              disabled={loading}
+            >
+              {loading ? 'Procesando...' : confirmDialog.type === 'clock-out' ? 'Finalizar' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
