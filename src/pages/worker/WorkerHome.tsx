@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, QrCode, MapPin, Calendar, History, AlertCircle, CheckCircle } from 'lucide-react';
+import { Clock, QrCode, MapPin, Calendar, History, AlertCircle, CheckCircle, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ClockInButton } from '@/components/worker/ClockInButton';
 import { QRScanner } from '@/components/worker/QRScanner';
@@ -9,6 +9,14 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useTimeEntry } from '@/hooks/useTimeEntry';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +28,7 @@ import {
 
 export default function WorkerHome() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -134,10 +142,35 @@ export default function WorkerHome() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{user?.email?.split('@')[0]}</span>
-            <Button variant="ghost" size="icon" onClick={() => navigate('/worker/history')}>
-              <History className="w-5 h-5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs">
+                      {user?.email?.charAt(0).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden sm:inline text-sm">{user?.email?.split('@')[0]}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => navigate('/worker/history')}>
+                  <History className="w-4 h-4 mr-2" />
+                  Historial
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={async () => {
+                    await signOut();
+                    navigate('/login');
+                  }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Cerrar Sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
